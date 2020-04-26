@@ -183,10 +183,10 @@ class building:
 		self.coord=coord
 		self.id=id
 		self.visitors=[]
-		self.infection_prob=0.2
-		self.death_prob=0.01
+		self.infection_prob=0.4
+		self.death_prob=0.07
 		self.detect_prob=0.2
-		self.recover_prob=0.01
+		self.recover_prob=0.25
 	def check_infected_visitors(self):
 		for person in self.visitors:
 			if person.status=="infected":
@@ -281,7 +281,7 @@ def simulate():
 	map1.print_people()
 	map1.plt_people()
 	'''
-	while map1.date!=5:
+	while map1.date!=55 and map1.total_infected>0:
 		print('\n'+"Day "+str(map1.date)+" statistics:")
 		simulate_one_day(map1)
 
