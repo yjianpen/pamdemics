@@ -4,8 +4,11 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 import math
 position_likelihood_list=dict()
-position_likelihood_list["student"]={"school":0.3,"shop":0.3,"entertainment":0.4,"hospital":0}
-position_likelihood_list["doctor"]={"school":0,"shop":0.3,"entertainment":0.4,"hospital":0.9}
+position_likelihood_list["student"]={"school":0.3,"shop":0.3,"entertainment":0.4,"hospital":0,"home":1}
+position_likelihood_list["doctor"]={"school":0,"shop":0.3,"entertainment":0.4,"hospital":0.9,"home":1}
+position_likelihood_list["clerk"]={"school":0,"shop":0.3,"entertainment":0.4,"hospital":0,"home":1}
+position_likelihood_list["esssential workers"]={"school":0,"shop":1.0,"entertainment":0.4,"hospital":0,"home":1}
+
 class person:
 	def __init__(self,coord,career,id,age=40):
 		self.coord=coord
@@ -16,7 +19,7 @@ class person:
 		self.id=id
 		self.home=coord #Assume that home is their initial coordinate
 		self.dailyhistory=[]
-		self.position_likelihood={"school":0.3,"shop":0.3,"entertainment":0.4,"home":1}
+		self.position_likelihood={"school":0.3,"shop":0.3,"entertainment":0.4,"home":1}## Let's try homogenous career first
 		self.position_timeperiod=[]
 		self.exposure_date=-1
 
@@ -180,7 +183,7 @@ class building:
 		self.coord=coord
 		self.id=id
 		self.visitors=[]
-		self.infection_prob=0.4
+		self.infection_prob=0.2
 		self.death_prob=0.01
 		self.detect_prob=0.2
 		self.recover_prob=0.01
@@ -258,12 +261,14 @@ def simulate_one_day(map):
 def simulate():
 	career=['doctor','student','clerk','essential workers']
 	map1=map(10,10,career)
+	## Initializing some buildings on our map
 	hospital1=building(typeb='hospital',coord=[2,2],id=0)
 	hospital2=building(typeb='hospital',coord=[8,7],id=1)
 	hospital3=building(typeb='hospital',coord=[3,1],id=2)
 	school1=building(typeb='school',coord=[7,6],id=3)
 	shop1=building(typeb='shop',coord=[6,5],id=4)
 	map1.add_people(30)
+	## Initializing patient 0
 	map1.people[0].status="infected"
 	map1.total_infected+=1
 	map1.total_susceptible-=1
@@ -277,13 +282,14 @@ def simulate():
 	map1.plt_people()
 	'''
 	while map1.date!=5:
-		print("Day "+str(map1.date)+" statistics:")
+		print('\n'+"Day "+str(map1.date)+" statistics:")
 		simulate_one_day(map1)
 
-simulate()
-'''
-map1.print_people()
-'''
+if __name__ == "__main__":
+	simulate()
+	'''
+	map1.print_people()
+	'''
 
 
 
