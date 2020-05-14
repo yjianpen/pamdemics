@@ -5,12 +5,13 @@ from scipy.stats import norm
 import math
 from scipy.interpolate import make_interp_spline, BSpline
 from scipy.ndimage.filters import gaussian_filter1d
+from params import load_params
 position_likelihood_list=dict()
 position_likelihood_list["student"]={"school":0.3,"shop":0.3,"entertainment":0.4,"hospital":0,"home":1}
 position_likelihood_list["doctor"]={"school":0,"shop":0.3,"entertainment":0.4,"hospital":0.9,"home":1}
 position_likelihood_list["clerk"]={"school":0,"shop":0.3,"entertainment":0.4,"hospital":0,"home":1}
 position_likelihood_list["esssential workers"]={"school":0,"shop":1.0,"entertainment":0.4,"hospital":0,"home":1}
-
+from pan_stats import get_R0
 class person:
 	def __init__(self,coord,career,id,age=40):
 		self.coord=coord
@@ -64,7 +65,10 @@ class map:
 		self.total_death=0
 		self.total_recovered=0
 		self.total_exposed=0
+		self.cum_infected=0
 		self.date=0
+		self.avg_activity=3
+
 
 
 
@@ -120,6 +124,7 @@ class map:
 	def shelter_policy(self,new_likelihood):
 		for person in self.people.values():
 			person.position_likelihood=new_likelihood
+		self.avg_activity=1
 
 	def plt_map(self,grid_mode=True):
 		r=self.row
@@ -189,10 +194,15 @@ class building:
 		self.coord=coord
 		self.id=id
 		self.visitors=[]
-		self.infection_prob=0.005
-		self.death_prob=0.007
+		self.infection_prob=0.03
+		self.death_prob=0.007 
 		self.detect_prob=0.05
 		self.recover_prob=0.025
+		if self.type=='hospital':
+			self.infection_prob=0.06
+			self.detect_prob=0.1
+			self.recover_prob=0.05
+			self.death_prob=0.007 
 	def check_infected_visitors(self):
 		for person in self.visitors:
 			if person.status=="infected":
@@ -220,6 +230,7 @@ class building:
 					person.status="infected"
 					map.total_exposed-=1
 					map.total_infected+=1
+					map.cum_infected+=1
 
 			if person.status=="infected":
 				i=np.random.binomial(1,self.death_prob, size=1)
@@ -232,6 +243,7 @@ class building:
 					person.status="recovered"
 					map.total_infected-=1
 					map.total_recovered+=1
+
 def plot_stats_smooth(stats):
 	x=range(len(stats))
 	y0 = gaussian_filter1d(stats[:,0], sigma=1)
@@ -265,7 +277,7 @@ def plot_stats(stats):
 	plt.show()
 
 def simulate_one_day(map):
-	avg_activity=3 ## Average times that a person go outdoor per week
+	avg_activity=map.avg_activity
 	city_dailyhistory=[]
 	for people in map.people.values():
 		locations=[]
@@ -283,11 +295,13 @@ def simulate_one_day(map):
 	map.date+=1
 	print("total_infected:",map.total_infected,"total_recovered",map.total_recovered,"total_death",map.total_death,"total_susceptible",map.total_susceptible,"total_exposed",map.total_exposed)
 
-	return [map.total_infected,map.total_recovered,map.total_death,map.total_susceptible]
+	return [map.total_infected,map.total_recovered,map.total_death,map.total_susceptible,map.cum_infected]
 
 
 
-def simulate():
+def simulate(parameters=[]):
+	if parameters!=[]:
+		num_people,alpha,beta,gamma,death_rate=parameters[0],parameters[1],parameters[2],parameters[3],parameters[4]
 	career=['doctor','student','clerk','essential workers']
 	map1=map(40,40,career)
 	## Initializing some buildings on our map
@@ -296,13 +310,13 @@ def simulate():
 	hospital3=building(typeb='hospital',coord=[3,1],id=2)
 	school1=building(typeb='school',coord=[7,6],id=3)
 	shop1=building(typeb='shop',coord=[6,5],id=4)
-	map1.add_people(500)
+	map1.add_people(20000)
 	## Initializing patient 0
 	map1.people[0].status="infected"
 	map1.total_infected+=1
 	map1.total_susceptible-=1
 	map1.add_home(map1.people.values())
-	map1.add_buildings([hospital1,hospital2,hospital3,school1,shop1])
+	map1.add_buildings([hospital1,school1,shop1])
 	edges=[([1,2],[2,3]),([7,8],[9,10]),([10,1],[9,10])]
 	map1.add_traffic(edges)
 	'''
@@ -310,20 +324,22 @@ def simulate():
 	map1.print_people()
 	map1.plt_people()
 	'''
-	stats=[1,0,0,max(map1.people.keys())]
+	stats=[1,0,0,max(map1.people.keys()),0]
 	print("initial stats",stats)
 	while map1.date!=55 and map1.total_infected>0:
-		if map1.date==3:
-			map1.shelter_policy({"school":0.01,"shop":0.01,"entertainment":0.0,"home":1})
+		if map1.date==55:
+			map1.shelter_policy({"school":0.001,"shop":0.001,"entertainment":0.0,"home":1})
 
 		print('\n'+"Day "+str(map1.date)+" statistics:")
 		if stats==[]:
 			stats=simulate_one_day(map1)
 		else:
 			stats= np.vstack((stats,simulate_one_day(map1)))
-		
+	print("R0 values",get_R0(stats))
 	plot_stats(stats)
 if __name__ == "__main__":
+	Jkantor_param=load_params()
+	print("parameters",Jkantor_param)
 	simulate()
 	'''
 	map1.print_people()
