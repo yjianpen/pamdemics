@@ -9,7 +9,7 @@ def load_params():
 	gamma = 1/t_infective
 	beta = R0*gamma
 	death_rate = 0.2
-	return N,alpha,gamma,beta,death_rate
+	return N,alpha,gamma,beta/3,death_rate
 
 
 def synthetic_params():

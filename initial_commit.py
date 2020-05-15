@@ -6,6 +6,8 @@ import math
 from scipy.interpolate import make_interp_spline, BSpline
 from scipy.ndimage.filters import gaussian_filter1d
 from params import load_params
+import time
+import random
 position_likelihood_list=dict()
 position_likelihood_list["student"]={"school":0.3,"shop":0.3,"entertainment":0.4,"hospital":0,"home":1}
 position_likelihood_list["doctor"]={"school":0,"shop":0.3,"entertainment":0.4,"hospital":0.9,"home":1}
@@ -22,7 +24,7 @@ class person:
 		self.id=id
 		self.home=coord #Assume that home is their initial coordinate
 		self.dailyhistory=[]
-		self.position_likelihood={"school":0.3,"shop":0.3,"entertainment":0.4,"home":1}## Let's try homogenous career first
+		self.position_likelihood={"school":0.3,"shop":0.3,"entertainment":0.4,"hospital":0,"home":1}## Let's try homogenous career first
 		self.position_timeperiod=[]
 		self.exposure_date=-1
 
@@ -67,7 +69,7 @@ class map:
 		self.total_exposed=0
 		self.cum_infected=0
 		self.date=0
-		self.avg_activity=3
+		self.avg_activity=1
 
 
 
@@ -76,18 +78,21 @@ class map:
 		self.buildings=buildings
 
 	##home is a special type of building
-	def add_home(self,people):
+	def add_home(self,people,family_size=3):
 		home_addresses=[]
-		for person in people:
-			if person.home not in home_addresses:
+		for i in range(len(people)):
+			person=list(people)[i]
+			if i%family_size==0:
 				home_addresses.append(person.home)
 				new_home=building(typeb='home',coord=person.home,id="h"+str(len(home_addresses)-1))
 				self.buildings.append(new_home)
+
 			else:
 				pass
 				'''
 				print("repeat!")
 				'''
+		print("number of homes",len(home_addresses))
 	def population_density():
 		return np.sum(human_map)/(len(human_map)*len(human_map[0]))
 
@@ -123,7 +128,16 @@ class map:
 
 	def shelter_policy(self,new_likelihood):
 		for person in self.people.values():
-			person.position_likelihood=new_likelihood
+			if person.status!="infected" and person.status!="exposed":
+				person.position_likelihood=new_likelihood
+		self.avg_activity=1
+
+	def quarantine_policy(self,new_likelihood,detect_prob):
+		rand=random.uniform(0, 1)
+
+		for person in self.people.values():
+			if person.status=="infected" or "exposed" and rand >(1-detect_prob):
+				person.position_likelihood=new_likelihood
 		self.avg_activity=1
 
 	def plt_map(self,grid_mode=True):
@@ -189,20 +203,20 @@ class map:
 
 
 class building:
-	def __init__(self,typeb,coord,id):
+	def __init__(self,typeb,coord,id,SEIR_params=[14000,0.028,0.043,0.03,0.25]):
 		self.type=typeb
 		self.coord=coord
 		self.id=id
 		self.visitors=[]
-		self.infection_prob=0.03
-		self.death_prob=0.007 
-		self.detect_prob=0.05
-		self.recover_prob=0.025
+		self.infection_prob=SEIR_params[3]
+		self.death_prob=SEIR_params[1]*SEIR_params[4]
+		self.detect_prob=SEIR_params[2]
+		self.recover_prob=SEIR_params[1]*(1-SEIR_params[4])
 		if self.type=='hospital':
-			self.infection_prob=0.06
-			self.detect_prob=0.1
-			self.recover_prob=0.05
-			self.death_prob=0.007 
+			self.infection_prob=SEIR_params[3]*2
+			self.detect_prob==SEIR_params[2]
+			self.recover_prob=SEIR_params[1]*(1-SEIR_params[4])*2
+			self.death_prob=SEIR_params[1]*SEIR_params[4]*2
 	def check_infected_visitors(self):
 		for person in self.visitors:
 			if person.status=="infected":
@@ -221,10 +235,16 @@ class building:
 			if person.status=="susceptible" and self.check_infected_visitors():
 				i=np.random.binomial(1,infection_prob, size=1)
 				if i==1:
+					'''
+					print("infection place",self.type)
+					'''
+					if person.career!="doctor":
+						person.position_likelihood["hospital"]=0.1
 					person.status="exposed"
 					map.total_exposed+=1
 					map.total_susceptible-=1
 			if person.status=="exposed":
+				
 				i=np.random.binomial(1,self.detect_prob, size=1)
 				if i==1:
 					person.status="infected"
@@ -282,11 +302,17 @@ def simulate_one_day(map):
 	for people in map.people.values():
 		locations=[]
 		likelihood=list(people.position_likelihood.values())
+		'''
+		print("l",likelihood)
+		'''
 		people.dailyhistory=[np.random.binomial(avg_activity,l, size=1)[0] for l in likelihood]
 		city_dailyhistory.append([people.id,people.dailyhistory])
 		for i in range(len(people.position_likelihood.values())):
 			if people.dailyhistory[i]!=0:
 				min_b=map.get_closest_builing(list(people.position_likelihood.keys())[i],people)
+				'''
+				print("type",list(people.position_likelihood.keys())[i],people.dailyhistory,map.date)
+				'''
 				locations.append(min_b)
 				min_b.visitors.append(people)
 	for building in map.buildings:
@@ -299,24 +325,27 @@ def simulate_one_day(map):
 
 
 
-def simulate(parameters=[]):
-	if parameters!=[]:
-		num_people,alpha,beta,gamma,death_rate=parameters[0],parameters[1],parameters[2],parameters[3],parameters[4]
+def simulate(parameters=[14000,0.028/6,0.043/6,0.03/6,0.25]):
+	start_time=time.time()
 	career=['doctor','student','clerk','essential workers']
 	map1=map(40,40,career)
 	## Initializing some buildings on our map
-	hospital1=building(typeb='hospital',coord=[2,2],id=0)
-	hospital2=building(typeb='hospital',coord=[8,7],id=1)
-	hospital3=building(typeb='hospital',coord=[3,1],id=2)
-	school1=building(typeb='school',coord=[7,6],id=3)
-	shop1=building(typeb='shop',coord=[6,5],id=4)
-	map1.add_people(20000)
+	num_people=parameters[0]
+
+	hospital1=building(typeb='hospital',coord=[2,2],id=0,SEIR_params=parameters)
+	hospital2=building(typeb='hospital',coord=[8,7],id=1,SEIR_params=parameters)
+	hospital3=building(typeb='hospital',coord=[3,1],id=2,SEIR_params=parameters)
+	school1=building(typeb='school',coord=[7,6],id=3,SEIR_params=parameters)
+	shop2=building(typeb='shop',coord=[3,1],id=5,SEIR_params=parameters)
+	shop3=building(typeb='shop',coord=[4,2],id=6,SEIR_params=parameters)
+	shop1=building(typeb='shop',coord=[6,5],id=4,SEIR_params=parameters)
+	map1.add_people(num_people)
 	## Initializing patient 0
 	map1.people[0].status="infected"
 	map1.total_infected+=1
 	map1.total_susceptible-=1
-	map1.add_home(map1.people.values())
-	map1.add_buildings([hospital1,school1,shop1])
+	map1.add_home(map1.people.values(),family_size=3)
+	map1.add_buildings([hospital1,school1,shop1,shop2,shop3])
 	edges=[([1,2],[2,3]),([7,8],[9,10]),([10,1],[9,10])]
 	map1.add_traffic(edges)
 	'''
@@ -326,17 +355,25 @@ def simulate(parameters=[]):
 	'''
 	stats=[1,0,0,max(map1.people.keys()),0]
 	print("initial stats",stats)
-	while map1.date!=55 and map1.total_infected>0:
-		if map1.date==55:
-			map1.shelter_policy({"school":0.001,"shop":0.001,"entertainment":0.0,"home":1})
-
+	while map1.date!=200 and map1.total_infected>0:
+		'''
+		if map1.date>=0:
+			map1.shelter_policy({"school":0.00,"shop":0.05,"entertainment":0.0,"home":1,"hospital":0.00})		
+		'''
 		print('\n'+"Day "+str(map1.date)+" statistics:")
-		if stats==[]:
+		if len(stats)==0:
 			stats=simulate_one_day(map1)
 		else:
 			stats= np.vstack((stats,simulate_one_day(map1)))
+		
+		if map1.date>=10:
+			map1.quarantine_policy({"school":0.0,"shop":0.0,"entertainment":0.0,"home":0.0,"hospital":0},detect_prob=0.15)
+		
 	print("R0 values",get_R0(stats))
+	end_time=time.time()
+	print("Simulation time:",end_time-start_time)
 	plot_stats(stats)
+	print("peak value",(np.argmax(stats[:,0]),np.max(stats[:,0])))
 if __name__ == "__main__":
 	Jkantor_param=load_params()
 	print("parameters",Jkantor_param)
